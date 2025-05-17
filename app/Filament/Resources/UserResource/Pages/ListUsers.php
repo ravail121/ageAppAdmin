@@ -11,6 +11,8 @@ use Illuminate\Database\Eloquent\Builder;
 class ListUsers extends ListRecords
 {
     protected static string $resource = UserResource::class;
+    protected static string $view = 'filament.pages.list-users';
+
 
     protected function getHeaderActions(): array
     {
