@@ -18,6 +18,11 @@ class MyProfile extends Page implements Forms\Contracts\HasForms
 
     public $name, $email, $password;
 
+    public static function getNavigationSort(): int
+    {
+        return 100; // lower priority (shows after Users)
+    }
+
     public function mount(): void
     {
         $admin = Auth::user();
