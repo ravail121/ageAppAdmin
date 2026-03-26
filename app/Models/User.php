@@ -5,6 +5,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Illuminate\Support\Facades\Storage;
+use App\Services\CognitoService;
 use Laravel\Sanctum\HasApiTokens;
 use Illuminate\Support\Str;
 
@@ -47,17 +48,22 @@ class User extends Authenticatable
 
     public function getAccountStatusLabelAttribute(): string
     {
-        return match ($this->accountStatus) {
-            1 => 'Active',
-            2 => 'Closed',
-            3 => 'Paused',
-            4 => 'Pending',
-            default => 'Unknown',
-        };
+        switch ((int) $this->accountStatus) {
+            case 1:
+                return 'Active';
+            case 2:
+                return 'Closed';
+            case 3:
+                return 'Paused';
+            case 4:
+                return 'Pending';
+            default:
+                return 'Unknown';
+        }
     }
     public function setProfileImageAttribute($value)
     {
-        if ($value && !str_starts_with($value, 'https://')) {
+        if ($value && !Str::startsWith($value, 'https://')) {
             $this->attributes['profileImage'] = Storage::disk('s3')->url($value);
         } else {
             $this->attributes['profileImage'] = $value;
@@ -70,6 +76,17 @@ class User extends Authenticatable
             if (empty($user->userID)) {
                 $user->userID = (string) Str::uuid();
             }
+        });
+
+        static::deleting(function (self $user) {
+            $identifier = $user->email ?: $user->mobileNumber;
+
+            // Cognito username is created from email or phone number.
+            if (!$identifier) {
+                return;
+            }
+
+            app(CognitoService::class)->deleteUser($identifier);
         });
     }
 

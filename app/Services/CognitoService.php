@@ -4,6 +4,8 @@ namespace App\Services;
 
 use Aws\CognitoIdentityProvider\CognitoIdentityProviderClient;
 use Aws\Credentials\Credentials;
+use Aws\Exception\AwsException;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class CognitoService
@@ -61,5 +63,30 @@ class CognitoService
         }
 
         throw new \Exception('Cognito userSub not found.');
+    }
+
+    public function deleteUser(string $identifier): void
+    {
+        try {
+            $this->client->adminDeleteUser([
+                'UserPoolId' => config('services.cognito.user_pool_id'),
+                'Username'   => $identifier,
+            ]);
+        } catch (AwsException $e) {
+            $code = $e->getAwsErrorCode();
+
+            // If the user is already gone from Cognito, treat as success.
+            if ($code === 'UserNotFoundException') {
+                return;
+            }
+
+            Log::error('Failed to delete Cognito user', [
+                'identifier' => $identifier,
+                'aws_error_code' => $code,
+                'message' => $e->getMessage(),
+            ]);
+
+            throw $e;
+        }
     }
 }
