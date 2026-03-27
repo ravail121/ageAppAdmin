@@ -89,4 +89,24 @@ class CognitoService
             throw $e;
         }
     }
+
+    public function setUserPassword(string $identifier, string $password, bool $permanent = true): void
+    {
+        try {
+            $this->client->adminSetUserPassword([
+                'UserPoolId' => config('services.cognito.user_pool_id'),
+                'Username'   => $identifier,
+                'Password'   => $password,
+                'Permanent'  => $permanent,
+            ]);
+        } catch (AwsException $e) {
+            Log::error('Failed to set Cognito user password', [
+                'identifier' => $identifier,
+                'aws_error_code' => $e->getAwsErrorCode(),
+                'message' => $e->getMessage(),
+            ]);
+
+            throw $e;
+        }
+    }
 }
