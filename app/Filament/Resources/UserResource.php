@@ -13,6 +13,7 @@ use Filament\Forms\Components\Placeholder;
 use Filament\Tables;
 use Filament\Tables\Table;
 use Illuminate\Support\HtmlString;
+use Illuminate\Validation\Rule;
 
 class UserResource extends Resource
 {
@@ -56,19 +57,7 @@ class UserResource extends Resource
                     ->required()
                     ->maxLength(50)
                     ->disabled(fn (string $context) => in_array($context, ['edit', 'view']))
-                    ->rules([
-                        fn (callable $get, $context) => function ($attribute, $value, $fail) use ($get, $context) {
-                            if (!empty($value)) {
-                                $query = \App\Models\User::where('userHandle', $value);
-                                if ($context === 'edit' && $record = $get('record')) {
-                                    $query->where('id', '!=', $record->id);
-                                }
-                                if ($query->exists()) {
-                                    $fail('This user handle is already in use.');
-                                }
-                            }
-                        },
-                    ]),
+                    ->rule(fn ($record) => Rule::unique(User::class, 'userHandle')->ignore($record)),
                 
                 
     
@@ -76,27 +65,9 @@ class UserResource extends Resource
                     ->email()
                     ->maxLength(100)
                     ->disabled(fn (string $context) => $context === 'edit')
-                    ->rules([
-                        fn (callable $get, $context) => function ($attribute, $value, $fail) use ($get, $context) {
-                            $mobile = $get('mobileNumber');
-                            if (empty($value) && empty($mobile)) {
-                                $fail('Either email or mobile number is required.');
-                            }
-                            if (!empty($value) && !empty($mobile)) {
-                                $fail('Please fill only one: email or mobile number — not both.');
-                            }
-                
-                            if (!empty($value)) {
-                                $query = \App\Models\User::where('email', $value);
-                                if ($context === 'edit' && $record = $get('record')) {
-                                    $query->where('id', '!=', $record->id);
-                                }
-                                if ($query->exists()) {
-                                    $fail('This email is already in use.');
-                                }
-                            }
-                        },
-                    ]),
+                    ->required(fn (string $context, callable $get) => $context === 'create' && empty($get('mobileNumber')))
+                    ->rule(fn (string $context, callable $get) => $context === 'create' && filled($get('mobileNumber')) ? 'prohibited' : null)
+                    ->rule(fn ($record) => Rule::unique(User::class, 'email')->ignore($record)),
                 
                 
                 
@@ -105,27 +76,9 @@ class UserResource extends Resource
                 ->label('Mobile Number')
                 ->maxLength(20)
                 ->disabled(fn (string $context) => $context === 'edit')
-                ->rules([
-                    fn (callable $get, $context) => function ($attribute, $value, $fail) use ($get, $context) {
-                        $email = $get('email');
-                        if (empty($value) && empty($email)) {
-                            $fail('Either mobile number or email is required.');
-                        }
-                        if (!empty($value) && !empty($email)) {
-                            $fail('Please fill only one: mobile number or email — not both.');
-                        }
-            
-                        if (!empty($value)) {
-                            $query = \App\Models\User::where('mobileNumber', $value);
-                            if ($context === 'edit' && $record = $get('record')) {
-                                $query->where('id', '!=', $record->id);
-                            }
-                            if ($query->exists()) {
-                                $fail('This mobile number is already in use.');
-                            }
-                        }
-                    },
-                ]),
+                ->required(fn (string $context, callable $get) => $context === 'create' && empty($get('email')))
+                ->rule(fn (string $context, callable $get) => $context === 'create' && filled($get('email')) ? 'prohibited' : null)
+                ->rule(fn ($record) => Rule::unique(User::class, 'mobileNumber')->ignore($record)),
             
             
     
@@ -223,13 +176,18 @@ class UserResource extends Resource
                 Tables\Columns\TextColumn::make('accountStatus')
                     ->label('Account Status')
                     ->formatStateUsing(function ($state) {
-                        return match ((int) $state) {
-                            1 => 'Active',
-                            2 => 'Closed',
-                            3 => 'Paused',
-                            4 => 'Pending',
-                            default => 'Unknown',
-                        };
+                        switch ((int) $state) {
+                            case 1:
+                                return 'Active';
+                            case 2:
+                                return 'Closed';
+                            case 3:
+                                return 'Paused';
+                            case 4:
+                                return 'Pending';
+                            default:
+                                return 'Unknown';
+                        }
                     })
                     ->badge()
                     ->colors([
