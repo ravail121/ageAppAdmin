@@ -4,10 +4,12 @@ namespace App\Filament\Resources\UserResource\Pages;
 
 use App\Filament\Resources\UserResource;
 use App\Services\CognitoService;
+use Aws\Exception\AwsException;
 use Filament\Actions;
 use Filament\Notifications\Notification;
 use Filament\Forms\Components\TextInput;
 use Filament\Resources\Pages\ViewRecord;
+use Illuminate\Support\Facades\Log;
 
 class ViewUser extends ViewRecord
 {
@@ -29,7 +31,14 @@ class ViewUser extends ViewRecord
                         ->password()
                         ->revealable()
                         ->required()
-                        ->minLength(8),
+                        ->minLength(8)
+                        ->rules([
+                            'regex:/[a-z]/',
+                            'regex:/[A-Z]/',
+                            'regex:/[0-9]/',
+                            'regex:/[^A-Za-z0-9]/',
+                        ])
+                        ->helperText('Must be at least 8 characters and include uppercase, lowercase, number, and symbol.'),
                     TextInput::make('password_confirmation')
                         ->label('Confirm password')
                         ->password()
@@ -52,10 +61,33 @@ class ViewUser extends ViewRecord
                         return;
                     }
 
-                    app(CognitoService::class)->setUserPassword($identifier, $data['password'], true);
+                    // Keep original casing; Cognito usernames can be case-sensitive.
+                    $identifier = trim($identifier);
+
+                    try {
+                        Log::info('Filament admin set password requested', [
+                            'identifier' => $identifier,
+                            'userID' => $user->userID ?? null,
+                        ]);
+
+                        app(CognitoService::class)->setUserPassword($identifier, $data['password'], true);
+                        $userInfo = app(CognitoService::class)->getUser($identifier);
+                    } catch (AwsException $e) {
+                        $code = $e->getAwsErrorCode();
+                        $message = $e->getAwsErrorMessage() ?: $e->getMessage();
+
+                        Notification::make()
+                            ->title('Cognito rejected the password')
+                            ->body(($code ? "{$code}: " : '') . $message)
+                            ->danger()
+                            ->send();
+
+                        return;
+                    }
 
                     Notification::make()
                         ->title('Password updated')
+                        ->body('Username: ' . $identifier . (isset($userInfo['UserLastModifiedDate']) ? (' • Cognito last modified: ' . (string) $userInfo['UserLastModifiedDate']) : ''))
                         ->success()
                         ->send();
                 }),
